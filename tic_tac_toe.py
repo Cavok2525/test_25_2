@@ -2,28 +2,114 @@
 import sys
 
 
+# ---------- UI Theming (ANSI) ----------
+def supports_color() -> bool:
+    """Best-effort detection whether ANSI colors are supported."""
+    if not sys.stdout.isatty():
+        return False
+    # Windows 10+ terminals generally support ANSI escape codes
+    return True
+
+
+COLOR_ENABLED = supports_color()
+
+
+def c(code: str) -> str:
+    return code if COLOR_ENABLED else ""
+
+
+RESET = c("\033[0m")
+BOLD = c("\033[1m")
+DIM = c("\033[2m")
+
+FG_CYAN = c("\033[36m")
+FG_GREEN = c("\033[32m")
+FG_MAGENTA = c("\033[35m")
+FG_YELLOW = c("\033[33m")
+FG_WHITE = c("\033[37m")
+
+BG_YELLOW = c("\033[43m")
+
+
 def clear_screen() -> None:
-    """Attempt to clear the terminal screen in a cross-platform way."""
-    # Keep it simple and robust without relying on external commands
-    print("\n" * 100)
+    """Clear terminal screen and move cursor to home."""
+    if COLOR_ENABLED:
+        # ANSI clear and home
+        print("\033[2J\033[H", end="")
+    else:
+        print("\n" * 100)
 
 
-def render_board(cells: list[str]) -> str:
-    """Return a human-friendly string representation of the board.
+def render_board(cells: list[str], last_move: int | None = None) -> str:
+    """Return a colorful, box-drawn representation of the board.
 
     The board is represented by a flat list of 9 strings ("X", "O", or " ").
     Cells are indexed 0..8, but we display positions 1..9 as a guide.
     """
-    def cell(i: int) -> str:
-        return cells[i] if cells[i] != " " else str(i + 1)
+    def symbol(i: int) -> str:
+        value = cells[i]
+        if value == "X":
+            return f"{BOLD}{FG_GREEN}X{RESET}"
+        if value == "O":
+            return f"{BOLD}{FG_MAGENTA}O{RESET}"
+        return f"{DIM}{FG_WHITE}{i + 1}{RESET}" if COLOR_ENABLED else str(i + 1)
 
-    row_sep = "-" * 11
-    rows = [
-        f" {cell(0)} | {cell(1)} | {cell(2)} ",
-        f" {cell(3)} | {cell(4)} | {cell(5)} ",
-        f" {cell(6)} | {cell(7)} | {cell(8)} ",
-    ]
-    return f"\n{rows[0]}\n{row_sep}\n{rows[1]}\n{row_sep}\n{rows[2]}\n"
+    def decorate(content: str, i: int) -> str:
+        if last_move is not None and i == last_move:
+            # Highlight background for the most recent move
+            return f"{BG_YELLOW}{content}{RESET}"
+        return content
+
+    # Build three rows; each cell is 1 char wide symbol centered in 3 spaces
+    top = f"{FG_CYAN}┌───┬───┬───┐{RESET}"
+    mid = f"{FG_CYAN}├───┼───┼───┤{RESET}"
+    bottom = f"{FG_CYAN}└───┴───┴───┘{RESET}"
+
+    r0 = (
+        f"{FG_CYAN}│{RESET} "
+        + decorate(symbol(0), 0)
+        + f" {FG_CYAN}│{RESET} "
+        + decorate(symbol(1), 1)
+        + f" {FG_CYAN}│{RESET} "
+        + decorate(symbol(2), 2)
+        + f" {FG_CYAN}│{RESET}"
+    )
+    r1 = (
+        f"{FG_CYAN}│{RESET} "
+        + decorate(symbol(3), 3)
+        + f" {FG_CYAN}│{RESET} "
+        + decorate(symbol(4), 4)
+        + f" {FG_CYAN}│{RESET} "
+        + decorate(symbol(5), 5)
+        + f" {FG_CYAN}│{RESET}"
+    )
+    r2 = (
+        f"{FG_CYAN}│{RESET} "
+        + decorate(symbol(6), 6)
+        + f" {FG_CYAN}│{RESET} "
+        + decorate(symbol(7), 7)
+        + f" {FG_CYAN}│{RESET} "
+        + decorate(symbol(8), 8)
+        + f" {FG_CYAN}│{RESET}"
+    )
+
+    return (
+        "\n"
+        + top
+        + "\n"
+        + r0
+        + "\n"
+        + mid
+        + "\n"
+        + r1
+        + "\n"
+        + mid
+        + "\n"
+        + r2
+        + "\n"
+        + bottom
+        + "\n"
+    )
 
 
 def check_winner(cells: list[str]) -> str | None:
@@ -72,28 +158,39 @@ def play_game() -> None:
     """Run a single game of Tic Tac Toe."""
     cells = [" "] * 9
     current = "X"
+    last_move: int | None = None
 
     while True:
         clear_screen()
-        print("Tre-i-rad (Tic Tac Toe)\n")
-        print(render_board(cells))
+        title = f"{BOLD}{FG_CYAN}Tre-i-rad (Tic Tac Toe){RESET}"
+        legend_x = f"{BOLD}{FG_GREEN}X{RESET}"
+        legend_o = f"{BOLD}{FG_MAGENTA}O{RESET}"
+        print(title)
+        print(f"{DIM}Välj en ruta 1-9. Skriv 'q' för att avsluta.{RESET}\n")
+        print(render_board(cells, last_move))
+        turn_color = FG_GREEN if current == "X" else FG_MAGENTA
+        print(f"{BOLD}{turn_color}Spelare {current}{RESET} är vid drag.\n")
 
         move = get_valid_move(cells, current)
         cells[move] = current
+        last_move = move
 
         winner = check_winner(cells)
         if winner is not None:
             clear_screen()
-            print("Tre-i-rad (Tic Tac Toe)\n")
-            print(render_board(cells))
-            print(f"Grattis! Spelare {winner} vinner!\n")
+            print(title)
+            print()
+            print(render_board(cells, last_move))
+            wcol = FG_GREEN if winner == "X" else FG_MAGENTA
+            print(f"{BOLD}{wcol}Grattis! Spelare {winner} vinner!{RESET}\n")
             break
 
         if is_draw(cells):
             clear_screen()
-            print("Tre-i-rad (Tic Tac Toe)\n")
-            print(render_board(cells))
-            print("Oavgjort!\n")
+            print(title)
+            print()
+            print(render_board(cells, last_move))
+            print(f"{BOLD}{FG_YELLOW}Oavgjort!{RESET}\n")
             break
 
         current = "O" if current == "X" else "X"
@@ -102,21 +199,21 @@ def play_game() -> None:
 def ask_play_again() -> bool:
     """Ask the users if they want to play another game."""
     while True:
-        answer = input("Spela igen? (j/n): ").strip().lower()
+        answer = input(f"{DIM}Spela igen? (j/n): {RESET}").strip().lower()
         if answer in {"j", "ja", "y", "yes"}:
             return True
         if answer in {"n", "nej", "no"}:
             return False
-        print("Svara med 'j' eller 'n'.")
+        print(f"{DIM}Svara med 'j' eller 'n'.{RESET}")
 
 
 def main() -> None:
-    print("Välkommen till Tre-i-rad (Tic Tac Toe)!")
-    print("Två spelare turas om att välja rutor 1-9. Skriv 'q' för att avsluta.\n")
+    print(f"{BOLD}Välkommen till Tre-i-rad (Tic Tac Toe)!{RESET}")
+    print(f"{DIM}Två spelare turas om att välja rutor 1-9. Skriv 'q' för att avsluta.{RESET}\n")
     while True:
         play_game()
         if not ask_play_again():
-            print("Tack för att du spelade! Hej då!")
+            print(f"{DIM}Tack för att du spelade! Hej då!{RESET}")
             break
 
 
